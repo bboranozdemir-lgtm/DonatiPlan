@@ -311,51 +311,9 @@ def _security_headers(response: Response) -> Response:
 
 @app.middleware("http")
 async def authentication_and_security(request: Request, call_next):
-    path = request.url.path
+    request.state.user = None
     if request.method == "OPTIONS":
         return _security_headers(await call_next(request))
-    if not path.startswith("/api/v1") or path in {
-        "/api/v1/health",
-        "/api/v1/auth/status",
-        "/api/v1/auth/bootstrap",
-        "/api/v1/auth/login",
-    }:
-        return _security_headers(await call_next(request))
-
-    store: SqliteStore = request.app.state.store
-    if store.user_count() == 0:
-        request.state.user = None
-        return _security_headers(await call_next(request))
-
-    token = request.cookies.get("rebarflow_session")
-    user = store.user_for_session(token)
-    if user is None:
-        return _security_headers(
-            JSONResponse(status_code=401, content={"detail": "authentication required"})
-        )
-    request.state.user = user
-
-    if "/users" in path and user.role != "admin":
-        return _security_headers(
-            JSONResponse(status_code=403, content={"detail": "administrator role required"})
-        )
-
-    is_logout = path.endswith("/auth/logout")
-    if request.method not in {"GET", "HEAD", "OPTIONS"} and not is_logout:
-        if user.role == "viewer":
-            return _security_headers(
-                JSONResponse(status_code=403, content={"detail": "read-only role"})
-            )
-        if ("/users" in path or "/backups/restore" in path) and user.role != "admin":
-            return _security_headers(
-                JSONResponse(status_code=403, content={"detail": "administrator role required"})
-            )
-        if user.role == "store" and not (
-            "/inventory" in path or path.endswith("/commit") or path.endswith("/auth/logout")
-        ):
-            return _security_headers(
-                JSONResponse(status_code=403, content={"detail": "engineer role required"})
-            )
     return _security_headers(await call_next(request))
 
 

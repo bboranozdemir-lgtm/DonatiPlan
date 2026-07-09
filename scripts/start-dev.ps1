@@ -34,6 +34,15 @@ function Wait-LocalPort {
     return $false
 }
 
+function Add-NodePathFromPnpm {
+    param([string]$PnpmPath)
+    $pnpmDir = Split-Path -Parent $PnpmPath
+    $nodeDir = Join-Path (Split-Path -Parent $pnpmDir) "node\bin"
+    if ((Get-Command "node.exe" -ErrorAction SilentlyContinue) -eq $null -and (Test-Path -LiteralPath (Join-Path $nodeDir "node.exe"))) {
+        $env:PATH = "$nodeDir;$env:PATH"
+    }
+}
+
 if (-not (Test-Path -LiteralPath $python)) {
     throw "Python sanal ortami bulunamadi: $python"
 }
@@ -46,6 +55,7 @@ $pnpm = Get-Command "pnpm.cmd" -ErrorAction SilentlyContinue
 if ($null -eq $pnpm) {
     throw "pnpm bulunamadi. Node.js ve pnpm kurulu olmali."
 }
+Add-NodePathFromPnpm $pnpm.Source
 
 Write-Host "DonatiPlan baslatiliyor..." -ForegroundColor Cyan
 

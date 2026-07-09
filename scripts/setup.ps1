@@ -14,6 +14,15 @@ function Assert-LastExitCode {
     }
 }
 
+function Add-NodePathFromPnpm {
+    param([string]$PnpmPath)
+    $pnpmDir = Split-Path -Parent $PnpmPath
+    $nodeDir = Join-Path (Split-Path -Parent $pnpmDir) "node\bin"
+    if ((Get-Command "node.exe" -ErrorAction SilentlyContinue) -eq $null -and (Test-Path -LiteralPath (Join-Path $nodeDir "node.exe"))) {
+        $env:PATH = "$nodeDir;$env:PATH"
+    }
+}
+
 if (-not (Test-Path -LiteralPath $venvPython)) {
     $pyLauncher = Get-Command "py.exe" -ErrorAction SilentlyContinue
     $python = Get-Command "python.exe" -ErrorAction SilentlyContinue
@@ -48,6 +57,7 @@ try {
     if ($null -eq $pnpm) {
         throw "pnpm bulunamadi. Node.js ve pnpm kurun."
     }
+    Add-NodePathFromPnpm $pnpm.Source
     & $pnpm.Source install
     Assert-LastExitCode "Frontend paket kurulumu basarisiz."
 }

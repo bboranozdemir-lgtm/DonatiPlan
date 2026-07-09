@@ -358,7 +358,7 @@ class AuthenticationApiTests(unittest.TestCase):
         app.state.store = self.original_store
         self.tempdir.cleanup()
 
-    def test_bootstrap_login_and_viewer_permissions(self) -> None:
+    def test_auth_endpoints_remain_but_api_is_local_access(self) -> None:
         status = self.client.get("/api/v1/auth/status").json()
         self.assertTrue(status["setup_required"])
 
@@ -382,21 +382,21 @@ class AuthenticationApiTests(unittest.TestCase):
         self.assertEqual(viewer.status_code, 201)
 
         anonymous = TestClient(app)
-        self.assertEqual(anonymous.get("/api/v1/projects").status_code, 401)
+        self.assertEqual(anonymous.get("/api/v1/projects").status_code, 200)
         login_response = anonymous.post(
             "/api/v1/auth/login",
             json={"username": "izleyici", "password": "izleyici-parola-123"},
         )
         self.assertEqual(login_response.status_code, 200)
         self.assertEqual(anonymous.get("/api/v1/projects").status_code, 200)
-        self.assertEqual(anonymous.get("/api/v1/users").status_code, 403)
-        forbidden = anonymous.post(
+        self.assertEqual(anonymous.get("/api/v1/users").status_code, 200)
+        created = anonymous.post(
             "/api/v1/projects",
-            json={"name": "Yasak Proje"},
+            json={"name": "Yerel Proje"},
         )
-        self.assertEqual(forbidden.status_code, 403)
+        self.assertEqual(created.status_code, 201)
         self.assertEqual(anonymous.post("/api/v1/auth/logout").status_code, 200)
-        self.assertEqual(anonymous.get("/api/v1/projects").status_code, 401)
+        self.assertEqual(anonymous.get("/api/v1/projects").status_code, 200)
         anonymous.close()
 
 

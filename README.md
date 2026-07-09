@@ -29,7 +29,7 @@ Geliştiren: Berke Boran Özdemir
 - Formüllü Excel ve yazdırılabilir PDF raporları
 - Maliyet, ağırlık ve karbon tasarrufu göstergeleri
 - Proje yedekleme ve geri yükleme
-- Yönetici, mühendis, depo ve görüntüleyici rolleri
+- Yerel kullanım modu; giriş ve kullanıcı hesabı gerekmez
 - Kurulabilir PWA kabuğu ve çevrimdışı arayüz önbelleği
 
 ## Hızlı başlangıç — Windows
@@ -39,7 +39,7 @@ Geliştiren: Berke Boran Özdemir
 tıklayın. API ve arayüz başlatılır; tarayıcı otomatik olarak
 `http://127.0.0.1:5173` adresini açar.
 
-İlk açılışta en az 10 karakterli parola ile yönetici hesabı oluşturulur.
+Uygulama yerel kullanım modunda açılır; kullanıcı adı veya parola gerektirmez.
 
 ## Geliştirici kurulumu
 
@@ -114,7 +114,7 @@ ZIP’e koymayın:
 - `*.db`, `*.sqlite`, `*.sqlite3`
 - `*.tsbuildinfo`
 
-Temiz paylaşım klasöründe sadece kaynak kod, `scripts`, `README.md`, `KULLANIM.md` ve örnek dosyalar bulunmalıdır. Gerçek saha verisi, kullanıcı hesabı/veritabanı ve derleme çıktıları paylaşım paketine girmemelidir.
+Temiz paylaşım klasöründe sadece kaynak kod, `scripts`, `README.md`, `KULLANIM.md` ve örnek dosyalar bulunmalıdır. Gerçek saha verisi, yerel veritabanı ve derleme çıktıları paylaşım paketine girmemelidir.
 
 ## Klasör yapısı
 
@@ -138,15 +138,6 @@ examples/         Örnek BBS verileri
 - `REBARFLOW_ALLOWED_ORIGINS`: Virgülle ayrılmış izinli web kökenleri
 - `REBARFLOW_SECURE_COOKIE=1`: HTTPS üretim ortamında güvenli çerez
 - `REBARFLOW_DATABASE_PATH`: SQLite veri dosyasının konumu
-
-## Roller
-
-| Rol | Okuma | Optimizasyon/proje | Stok işlemleri | Kullanıcı/yedek geri yükleme |
-|---|---:|---:|---:|---:|
-| Yönetici | ✓ | ✓ | ✓ | ✓ |
-| Mühendis | ✓ | ✓ | ✓ | — |
-| Depo | ✓ | — | ✓ | — |
-| Görüntüleyici | ✓ | — | — | — |
 
 ## Veri ve yedekleme
 

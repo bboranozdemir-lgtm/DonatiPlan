@@ -1,23 +1,17 @@
-import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   bbsTemplateUrl,
-  bootstrapAdmin,
   createProject,
   commitRun,
-  createUser,
   importCsv,
   importXlsx,
-  getAuthStatus,
   inventoryLabelsUrl,
   listProjects,
   listRuns,
-  listUsers,
   loadProjectDemands,
   loadInventory,
   loadMovements,
   loadProjectSettings,
-  login,
-  logout,
   optimizeProject,
   readCsvFile,
   projectBackupUrl,
@@ -36,8 +30,6 @@ import type {
   RemnantInput,
   RunSummary,
   InventoryMovement,
-  AuthStatus,
-  AuthUser,
 } from "./types";
 import QrScanner from "./QrScanner";
 
@@ -122,28 +114,9 @@ function App() {
   const [inventoryBusy, setInventoryBusy] = useState(false);
   const [inventoryNote, setInventoryNote] = useState("");
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
-  const [auth, setAuth] = useState<AuthStatus | null>(null);
-  const [authUsername, setAuthUsername] = useState("");
-  const [authPassword, setAuthPassword] = useState("");
-  const [authBusy, setAuthBusy] = useState(false);
-  const [authError, setAuthError] = useState("");
-  const [users, setUsers] = useState<AuthUser[]>([]);
-  const [newUsername, setNewUsername] = useState("");
-  const [newUserPassword, setNewUserPassword] = useState("");
-  const [newUserRole, setNewUserRole] = useState<AuthUser["role"]>("engineer");
-  const [userNote, setUserNote] = useState("");
   const [scannerOpen, setScannerOpen] = useState(false);
 
   useEffect(() => {
-    getAuthStatus()
-      .then(setAuth)
-      .catch((reason) => setAuthError(
-        reason instanceof Error ? reason.message : "Oturum durumu alınamadı.",
-      ));
-  }, []);
-
-  useEffect(() => {
-    if (!auth?.authenticated) return;
     let cancelled = false;
     listProjects()
       .then((items) => {
@@ -157,15 +130,7 @@ function App() {
         if (!cancelled) setError(reason instanceof Error ? reason.message : "Projeler yüklenemedi.");
       });
     return () => { cancelled = true; };
-  }, [auth?.authenticated]);
-
-  useEffect(() => {
-    if (auth?.user?.role !== "admin") {
-      setUsers([]);
-      return;
-    }
-    listUsers().then(setUsers).catch(() => setUsers([]));
-  }, [auth?.user?.role]);
+  }, []);
 
   useEffect(() => {
     if (!activeProjectId) {
@@ -212,9 +177,8 @@ function App() {
     () => demands.reduce((sum, item) => sum + item.quantity, 0),
     [demands],
   );
-  const role = auth?.user?.role;
-  const canPlan = role === "admin" || role === "engineer";
-  const canManageInventory = canPlan || role === "store";
+  const canPlan = true;
+  const canManageInventory = true;
 
   const updateDemand = (id: string, field: keyof DemandInput, value: string) => {
     setDemands((rows) =>
@@ -339,58 +303,6 @@ function App() {
     }
   };
 
-  const handleAuthenticate = async () => {
-    setAuthBusy(true);
-    setAuthError("");
-    try {
-      if (auth?.setup_required) {
-        await bootstrapAdmin(authUsername.trim(), authPassword);
-      } else {
-        await login(authUsername.trim(), authPassword);
-      }
-      setAuth(await getAuthStatus());
-      setAuthPassword("");
-    } catch (err) {
-      setAuthError(err instanceof Error ? err.message : "Oturum açılamadı.");
-    } finally {
-      setAuthBusy(false);
-    }
-  };
-
-  const submitAuthForm = () => {
-    if (!authBusy && authUsername.length >= 3 && authPassword.length >= 10) {
-      void handleAuthenticate();
-    }
-  };
-
-  const handleAuthEnter = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      submitAuthForm();
-    }
-  };
-
-  const handleLogout = async () => {
-    await logout();
-    setProjects([]);
-    setActiveProjectId("");
-    setAuth(await getAuthStatus());
-  };
-
-  const handleCreateUser = async () => {
-    setUserNote("");
-    setError("");
-    try {
-      await createUser(newUsername.trim(), newUserPassword, newUserRole);
-      setUsers(await listUsers());
-      setNewUsername("");
-      setNewUserPassword("");
-      setUserNote("Kullanıcı oluşturuldu.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Kullanıcı oluşturulamadı.");
-    }
-  };
-
   const handleRestoreBackup = async (file: File | undefined) => {
     if (!file) return;
     setProjectBusy(true);
@@ -471,35 +383,6 @@ function App() {
     setMovements(loadedMovements);
   };
 
-  if (!auth || auth.setup_required || !auth.authenticated) {
-    return (
-      <div className="auth-shell">
-        <form
-          className="auth-card"
-          onSubmit={(event) => {
-            event.preventDefault();
-            submitAuthForm();
-          }}
-        >
-          <div className="brand-mark">DP</div>
-          <p className="eyebrow">DONATIPLAN / GÜVENLİ ÇALIŞMA ALANI</p>
-          <h1>{auth?.setup_required ? "İlk yöneticiyi oluştur." : "Tekrar hoş geldin."}</h1>
-          <p>
-            {auth?.setup_required
-              ? "En az 10 karakterli bir parola belirleyin. Bu hesap kullanıcıları ve yedekleri yönetecek."
-              : "Projelerinize erişmek için kullanıcı bilgilerinizle giriş yapın."}
-          </p>
-          <label>Kullanıcı adı<input value={authUsername} onChange={(event) => setAuthUsername(event.target.value)} onKeyDown={handleAuthEnter} autoComplete="username" /></label>
-          <label>Parola<input type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} onKeyDown={handleAuthEnter} autoComplete={auth?.setup_required ? "new-password" : "current-password"} /></label>
-          {authError && <div className="error-box">{authError}</div>}
-          <button type="submit" disabled={authBusy || authUsername.length < 3 || authPassword.length < 10}>
-            {authBusy ? "Kontrol ediliyor…" : auth?.setup_required ? "Yönetici hesabını oluştur" : "Giriş yap"}
-          </button>
-        </form>
-      </div>
-    );
-  }
-
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -509,8 +392,7 @@ function App() {
           <span>Akıllı Donatı Kesim, Artık ve Hurda Analizi · by BBO</span>
         </div>
         <div className="user-status">
-          <span>{auth.user?.username} · {auth.user?.role}</span>
-          <button onClick={handleLogout}>Çıkış</button>
+          <span>Yerel kullanım modu</span>
         </div>
         <div className="status"><i /> {activeProjectId ? "Veritabanına bağlı" : "Proje bekleniyor"}</div>
       </header>
@@ -547,21 +429,12 @@ function App() {
             {activeProjectId && (
               <a className="toolbar-link" href={projectBackupUrl(activeProjectId)}>Yedek al</a>
             )}
-            {role === "admin" && (
-              <label className="toolbar-link file-button">
-                Yedek yükle
-                <input type="file" accept=".json,application/json" onChange={(event) => handleRestoreBackup(event.target.files?.[0])} />
-              </label>
-            )}
+            <label className="toolbar-link file-button">
+              Yedek yükle
+              <input type="file" accept=".json,application/json" onChange={(event) => handleRestoreBackup(event.target.files?.[0])} />
+            </label>
           </div>
         </section>
-        {!canPlan && (
-          <div className="permission-note">
-            {role === "store"
-              ? "Depo rolü: QR ve stok hareketleri açık; proje ve optimizasyon alanları salt okunur."
-              : "Görüntüleyici rolü: proje verileri ve raporlar salt okunur."}
-          </div>
-        )}
         {activeProjectId && (
           <details className="settings-panel">
             <summary>Proje mühendislik ayarları</summary>
@@ -574,26 +447,6 @@ function App() {
               <label>Para birimi<input disabled={!canPlan} maxLength={3} value={settings.currency} onChange={(event) => updateSetting("currency", event.target.value)} /></label>
               <button disabled={settingsBusy || !canPlan} onClick={handleSaveSettings}>{settingsBusy ? "Kaydediliyor…" : "Ayarları kaydet"}</button>
               {settingsNote && <span>{settingsNote}</span>}
-            </div>
-          </details>
-        )}
-        {auth.user?.role === "admin" && (
-          <details className="settings-panel users-panel">
-            <summary>Kullanıcılar ve roller</summary>
-            <div className="user-management">
-              <div className="user-list">
-                {users.map((user) => <span key={user.id}>{user.username}<em>{user.role}</em></span>)}
-              </div>
-              <input placeholder="Kullanıcı adı" value={newUsername} onChange={(event) => setNewUsername(event.target.value)} />
-              <input type="password" placeholder="En az 10 karakter parola" value={newUserPassword} onChange={(event) => setNewUserPassword(event.target.value)} />
-              <select value={newUserRole} onChange={(event) => setNewUserRole(event.target.value as AuthUser["role"])}>
-                <option value="engineer">Mühendis</option>
-                <option value="store">Depo sorumlusu</option>
-                <option value="viewer">Görüntüleyici</option>
-                <option value="admin">Yönetici</option>
-              </select>
-              <button disabled={newUsername.length < 3 || newUserPassword.length < 10} onClick={handleCreateUser}>Kullanıcı ekle</button>
-              {userNote && <small>{userNote}</small>}
             </div>
           </details>
         )}
