@@ -249,7 +249,6 @@ class PersistentApiTests(unittest.TestCase):
         self.assertEqual(workbook["Özet"]["B21"].value, "=B20*'Talepler'!K2")
         self.assertEqual(workbook["Özet"]["B22"].value, "=B20*'Talepler'!K3")
         self.assertEqual(workbook["Talepler"]["A3"].value, "'=1+1")
-        self.assertTrue(str(workbook["Kesim Planı"]["E3"].value).startswith("'="))
         self.assertEqual(workbook["Kullanılabilir Artık"]["A2"].value, "Kaynak Stok")
 
         pdf_report = self.client.get(

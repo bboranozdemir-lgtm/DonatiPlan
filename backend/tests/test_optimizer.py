@@ -1,4 +1,5 @@
 import sys
+import time
 import unittest
 from pathlib import Path
 
@@ -66,6 +67,16 @@ class GreedyCutOptimizerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "exceeds"):
             self.optimizer.optimize([CutDemand("X", 16, 12_500, 1)])
 
+    def test_rejects_negative_empty_or_invalid_demand_values(self) -> None:
+        with self.assertRaisesRegex(ValueError, "mark"):
+            CutDemand("", 16, 1_000, 1)
+        with self.assertRaisesRegex(ValueError, "positive"):
+            CutDemand("NEG", 16, -1_000, 1)
+        with self.assertRaisesRegex(ValueError, "positive"):
+            CutDemand("ZERO", 16, 0, 1)
+        with self.assertRaisesRegex(ValueError, "positive"):
+            CutDemand("BADQ", 16, 1_000, 0)
+
     def test_result_conserves_length(self) -> None:
         result = self.optimizer.optimize(
             [CutDemand("A", 16, 4_000, 4)],
@@ -91,9 +102,38 @@ class GreedyCutOptimizerTests(unittest.TestCase):
             result.demand_length_mm + result.kerf_loss_mm + result.scrap_output_mm,
         )
 
+    def test_multistart_prefers_less_real_scrap_with_same_bar_count(self) -> None:
+        result = self.optimizer.optimize(
+            [
+                CutDemand("S1000", 16, 1_000, 4),
+                CutDemand("L8500", 16, 8_500, 1),
+            ]
+        )
+        remainders = sorted(pattern.remaining_mm for pattern in result.patterns)
+        self.assertEqual(result.purchased_bar_count, 2)
+        self.assertEqual(result.total_waste_mm, 11_500)
+        self.assertEqual(result.real_scrap_mm, 0)
+        self.assertEqual(remainders, [3_500, 8_000])
+
+    def test_multistart_prefers_single_long_reusable_remnant(self) -> None:
+        result = self.optimizer.optimize(
+            [
+                CutDemand("L6000", 16, 6_000, 2),
+                CutDemand("L3000", 16, 3_000, 2),
+            ]
+        )
+        reusable = sorted(
+            pattern.remaining_mm
+            for pattern in result.patterns
+            if pattern.remaining_mm >= 1_000
+        )
+        self.assertEqual(result.purchased_bar_count, 2)
+        self.assertEqual(result.real_scrap_mm, 0)
+        self.assertEqual(reusable, [6_000])
+
 
 class BranchAndBoundCutOptimizerTests(unittest.TestCase):
-    def test_exact_solver_improves_known_greedy_counterexample(self) -> None:
+    def test_multistart_fast_matches_exact_on_known_counterexample(self) -> None:
         demands = [
             CutDemand(str(index), 16, length, 1)
             for index, length in enumerate((20, 20, 20, 25, 45, 60))
@@ -104,7 +144,7 @@ class BranchAndBoundCutOptimizerTests(unittest.TestCase):
             min_reusable_mm=10,
             max_items=10,
         )
-        self.assertEqual(greedy.optimize(demands).purchased_bar_count, 3)
+        self.assertEqual(greedy.optimize(demands).purchased_bar_count, 2)
         self.assertEqual(exact.optimize(demands).purchased_bar_count, 2)
 
     def test_exact_solver_finds_feasible_plan_and_conserves_material(self) -> None:
@@ -240,6 +280,19 @@ class OptimizationServiceTests(unittest.TestCase):
                 [CutDemand("A", 12, 1000, 501)],
                 mode=OptimizationMode.FAST,
             )
+
+    def test_fast_mode_handles_large_data_quickly(self) -> None:
+        demands = [
+            CutDemand("D12-2400", 12, 2_400, 160),
+            CutDemand("D16-3600", 16, 3_600, 160),
+            CutDemand("D20-5100", 20, 5_100, 120),
+        ]
+        started = time.perf_counter()
+        run = OptimizationService().run(demands, mode=OptimizationMode.FAST)
+        elapsed = time.perf_counter() - started
+        self.assertEqual(run.piece_count, 440)
+        self.assertLess(elapsed, 2.0)
+        self.assertGreater(run.result.purchased_bar_count, 0)
 
 
 class CpSatCutOptimizerTests(unittest.TestCase):

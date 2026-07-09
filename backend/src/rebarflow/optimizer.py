@@ -67,45 +67,15 @@ class GreedyCutOptimizer:
                 CutPattern(stock=piece, remaining_mm=piece.length_mm)
             )
 
-        new_counter = 0
         all_patterns: list[CutPattern] = []
         for diameter in sorted(expanded):
-            items = sorted(
-                expanded[diameter],
-                key=lambda item: (item.phase, -item.length_mm, item.mark),
+            all_patterns.extend(
+                self._solve_diameter_heuristic(
+                    diameter,
+                    expanded[diameter],
+                    available[diameter],
+                )
             )
-            bins = available[diameter]
-            all_patterns.extend(bins)
-
-            for item in items:
-                required_mm = item.length_mm + self.kerf_mm
-                candidates = [
-                    pattern for pattern in bins if pattern.remaining_mm >= required_mm
-                ]
-                if candidates:
-                    chosen = min(
-                        candidates,
-                        key=lambda pattern: (
-                            pattern.remaining_mm - required_mm,
-                            pattern.stock.source == StockSource.NEW,
-                            pattern.stock.id,
-                        ),
-                    )
-                else:
-                    new_counter += 1
-                    stock = StockPiece(
-                        id=f"NEW-{diameter}-{new_counter:05d}",
-                        diameter_mm=diameter,
-                        length_mm=self.stock_length_mm,
-                        source=StockSource.NEW,
-                    )
-                    chosen = CutPattern(stock=stock, remaining_mm=self.stock_length_mm)
-                    bins.append(chosen)
-                    all_patterns.append(chosen)
-
-                chosen.cuts.append(item)
-                chosen.remaining_mm -= required_mm
-                chosen.kerf_loss_mm += self.kerf_mm
 
         used_patterns = [pattern for pattern in all_patterns if pattern.cuts]
         purchased_length = sum(
@@ -139,6 +109,128 @@ class GreedyCutOptimizer:
             kerf_loss_mm=sum(pattern.kerf_loss_mm for pattern in used_patterns),
         )
 
+    def _solve_diameter_heuristic(
+        self,
+        diameter: int,
+        items: list[CutItem],
+        remnants: list[CutPattern],
+    ) -> list[CutPattern]:
+        strategies = (
+            _PlacementStrategy("best-fit-desc", "desc", "best_fit"),
+            _PlacementStrategy("best-fit-asc", "asc", "best_fit"),
+            _PlacementStrategy("phase-desc", "phase_desc", "best_fit"),
+            _PlacementStrategy("phase-asc", "phase_asc", "best_fit"),
+            _PlacementStrategy("least-scrap-desc", "desc", "least_scrap"),
+            _PlacementStrategy("long-remnant-desc", "desc", "preserve_long"),
+            _PlacementStrategy("first-fit-desc", "desc", "first_fit"),
+        )
+        best_bins: list[_SearchBin] | None = None
+        best_score: tuple[int, int, int, int, int] | None = None
+        for strategy in strategies:
+            candidate = self._run_placement_strategy(diameter, items, remnants, strategy)
+            score = _score_bins(candidate, self.min_reusable_mm)
+            if best_score is None or score < best_score:
+                best_score = score
+                best_bins = candidate
+        if best_bins is None:
+            raise RuntimeError("heuristic solver failed to produce a feasible plan")
+        return [
+            CutPattern(
+                stock=bin_.stock,
+                cuts=list(bin_.cuts),
+                remaining_mm=bin_.remaining_mm,
+                kerf_loss_mm=bin_.kerf_loss_mm,
+            )
+            for bin_ in best_bins
+            if bin_.cuts
+        ]
+
+    def _run_placement_strategy(
+        self,
+        diameter: int,
+        items: list[CutItem],
+        remnants: list[CutPattern],
+        strategy: _PlacementStrategy,
+    ) -> list[_SearchBin]:
+        ordered_items = sorted(items, key=self._item_sort_key(strategy.item_order))
+        bins = [
+            _SearchBin(
+                stock=pattern.stock,
+                remaining_mm=pattern.stock.length_mm,
+                cuts=[],
+                kerf_loss_mm=0,
+            )
+            for pattern in sorted(
+                remnants,
+                key=lambda pattern: (-pattern.stock.length_mm, pattern.stock.id),
+            )
+        ]
+        new_counter = 0
+
+        for item in ordered_items:
+            required_mm = item.length_mm + self.kerf_mm
+            candidates = [
+                (bin_index, bin_)
+                for bin_index, bin_ in enumerate(bins)
+                if bin_.remaining_mm >= required_mm
+            ]
+            if candidates:
+                chosen_index, chosen = min(
+                    candidates,
+                    key=lambda pair: self._bin_choice_key(pair[0], pair[1], required_mm, strategy.bin_choice),
+                )
+            else:
+                new_counter += 1
+                chosen = _SearchBin(
+                    stock=StockPiece(
+                        id=f"NEW-{diameter}-H{new_counter:05d}",
+                        diameter_mm=diameter,
+                        length_mm=self.stock_length_mm,
+                        source=StockSource.NEW,
+                    ),
+                    remaining_mm=self.stock_length_mm,
+                    cuts=[],
+                    kerf_loss_mm=0,
+                )
+                bins.append(chosen)
+                chosen_index = len(bins) - 1
+
+            del chosen_index
+            chosen.cuts.append(item)
+            chosen.remaining_mm -= required_mm
+            chosen.kerf_loss_mm += self.kerf_mm
+        return bins
+
+    def _item_sort_key(self, order: str):
+        if order == "asc":
+            return lambda item: (item.length_mm, item.phase, item.mark)
+        if order == "phase_desc":
+            return lambda item: (item.phase, -item.length_mm, item.mark)
+        if order == "phase_asc":
+            return lambda item: (item.phase, item.length_mm, item.mark)
+        return lambda item: (-item.length_mm, item.phase, item.mark)
+
+    def _bin_choice_key(
+        self,
+        index: int,
+        bin_: _SearchBin,
+        required_mm: int,
+        choice: str,
+    ) -> tuple[int, int, int, int, str]:
+        post_remaining = bin_.remaining_mm - required_mm
+        is_new = int(bin_.stock.source == StockSource.NEW)
+        if choice == "first_fit":
+            return (is_new, index, 0, 0, bin_.stock.id)
+        if choice == "least_scrap":
+            real_scrap = post_remaining if 0 < post_remaining < self.min_reusable_mm else 0
+            reusable_penalty = 0 if post_remaining == 0 or post_remaining >= self.min_reusable_mm else 1
+            return (real_scrap, reusable_penalty, post_remaining, is_new, bin_.stock.id)
+        if choice == "preserve_long":
+            scrap_penalty = 1 if 0 < post_remaining < self.min_reusable_mm else 0
+            long_reusable = post_remaining if post_remaining >= self.min_reusable_mm else 0
+            return (scrap_penalty, -long_reusable, post_remaining, is_new, bin_.stock.id)
+        return (post_remaining, is_new, index, 0, bin_.stock.id)
+
 
 @dataclass(slots=True)
 class _SearchBin:
@@ -146,6 +238,49 @@ class _SearchBin:
     remaining_mm: int
     cuts: list[CutItem]
     kerf_loss_mm: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class _PlacementStrategy:
+    name: str
+    item_order: str
+    bin_choice: str
+
+
+def _score_bins(
+    bins: Iterable[_SearchBin],
+    min_reusable_mm: int,
+) -> tuple[int, int, int, int, int]:
+    """Return the canonical optimization score.
+
+    Lower tuples are better:
+    1. new stock bar count
+    2. true scrap below the reusable threshold
+    3. total remaining waste
+    4. reusable remnant piece count
+    5. longest reusable remnant, negated so a longer single remnant wins
+    """
+
+    used = [bin_ for bin_ in bins if bin_.cuts]
+    purchased = int(sum(bin_.stock.source == StockSource.NEW for bin_ in used))
+    real_scrap = sum(
+        bin_.remaining_mm
+        for bin_ in used
+        if 0 < bin_.remaining_mm < min_reusable_mm
+    )
+    total_waste = sum(bin_.remaining_mm for bin_ in used)
+    reusable_lengths = [
+        bin_.remaining_mm
+        for bin_ in used
+        if bin_.remaining_mm >= min_reusable_mm and bin_.remaining_mm > 0
+    ]
+    return (
+        purchased,
+        real_scrap,
+        total_waste,
+        len(reusable_lengths),
+        -max(reusable_lengths, default=0),
+    )
 
 
 class BranchAndBoundCutOptimizer(GreedyCutOptimizer):
@@ -234,18 +369,16 @@ class BranchAndBoundCutOptimizer(GreedyCutOptimizer):
             for index, item in enumerate(items)
         ]
         greedy = super().optimize(greedy_demands, remnants)
-        best_score = self._score_patterns(
-            [
-                _SearchBin(
-                    pattern.stock,
-                    pattern.remaining_mm,
-                    list(pattern.cuts),
-                    pattern.kerf_loss_mm,
-                )
-                for pattern in greedy.patterns
-            ]
-        )
-        best_bins: list[_SearchBin] | None = None
+        best_bins: list[_SearchBin] | None = [
+            _SearchBin(
+                pattern.stock,
+                pattern.remaining_mm,
+                list(pattern.cuts),
+                pattern.kerf_loss_mm,
+            )
+            for pattern in greedy.patterns
+        ]
+        best_score = self._score_patterns(best_bins)
 
         suffix_sum = [0] * (len(items) + 1)
         for index in range(len(items) - 1, -1, -1):
@@ -275,7 +408,7 @@ class BranchAndBoundCutOptimizer(GreedyCutOptimizer):
             nonlocal best_bins, best_score
             if index == len(items):
                 candidate_score = score_bins(bins)
-                if candidate_score < best_score or best_bins is None:
+                if candidate_score < best_score:
                     best_score = candidate_score
                     best_bins = copy_bins(bins)
                 return
@@ -349,22 +482,7 @@ class BranchAndBoundCutOptimizer(GreedyCutOptimizer):
         ]
 
     def _score_patterns(self, bins: list[_SearchBin]) -> tuple[int, int, int, int, int]:
-        used = [bin_ for bin_ in bins if bin_.cuts]
-        purchased = int(sum(bin_.stock.source == StockSource.NEW for bin_ in used))
-        real_scrap = sum(
-            bin_.remaining_mm
-            for bin_ in used
-            if 0 < bin_.remaining_mm < self.min_reusable_mm
-        )
-        total_waste = sum(bin_.remaining_mm for bin_ in used)
-        reusable_lengths = [
-            bin_.remaining_mm
-            for bin_ in used
-            if bin_.remaining_mm >= self.min_reusable_mm and bin_.remaining_mm > 0
-        ]
-        reusable_count = len(reusable_lengths)
-        longest_reusable = max(reusable_lengths, default=0)
-        return purchased, real_scrap, total_waste, reusable_count, -longest_reusable
+        return _score_bins(bins, self.min_reusable_mm)
 
     def _build_result(
         self,
@@ -508,6 +626,7 @@ class CpSatCutOptimizer(BranchAndBoundCutOptimizer):
         remaining_vars = []
         scrap_length_vars = []
         reusable_piece_vars = []
+        reusable_length_vars = []
         for bin_index, stock in enumerate(stocks):
             assigned = [
                 (required_lengths[item_index], assignments[(item_index, bin_index)])
@@ -516,6 +635,7 @@ class CpSatCutOptimizer(BranchAndBoundCutOptimizer):
             ]
             remaining = model.new_int_var(0, stock.length_mm, f"remaining_{bin_index}")
             scrap_length = model.new_int_var(0, stock.length_mm, f"scrap_{bin_index}")
+            reusable_length = model.new_int_var(0, stock.length_mm, f"reusable_len_{bin_index}")
             scrap_piece = model.new_bool_var(f"scrap_piece_{bin_index}")
             reusable_piece = model.new_bool_var(f"reusable_piece_{bin_index}")
             if assigned:
@@ -538,16 +658,21 @@ class CpSatCutOptimizer(BranchAndBoundCutOptimizer):
                 model.add(reusable_piece == used[bin_index])
             model.add(scrap_length == remaining).only_enforce_if(scrap_piece)
             model.add(scrap_length == 0).only_enforce_if(scrap_piece.Not())
+            model.add(reusable_length == remaining).only_enforce_if(reusable_piece)
+            model.add(reusable_length == 0).only_enforce_if(reusable_piece.Not())
             remaining_vars.append(remaining)
             scrap_length_vars.append(scrap_length)
             reusable_piece_vars.append(reusable_piece)
+            reusable_length_vars.append(reusable_length)
 
         for bin_index in range(existing_count, len(stocks) - 1):
             model.add(used[bin_index] >= used[bin_index + 1])
 
         total_capacity = sum(stock.length_mm for stock in stocks)
-        reusable_weight = 1
-        waste_weight = len(stocks) + 1
+        longest_reusable = model.new_int_var(0, total_capacity, "longest_reusable")
+        model.add_max_equality(longest_reusable, reusable_length_vars)
+        reusable_weight = total_capacity + 1
+        waste_weight = (len(stocks) + 1) * reusable_weight
         scrap_weight = (total_capacity + 1) * waste_weight
         new_bar_weight = (total_capacity + 1) * scrap_weight
         new_bar_count = sum(used[index] for index in range(existing_count, len(stocks)))
@@ -559,6 +684,7 @@ class CpSatCutOptimizer(BranchAndBoundCutOptimizer):
             + scrap_weight * real_scrap
             + waste_weight * total_waste
             + reusable_weight * reusable_piece_count
+            - longest_reusable
         )
 
         solver = cp_model.CpSolver()
