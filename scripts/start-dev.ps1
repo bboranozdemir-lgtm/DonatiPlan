@@ -4,7 +4,6 @@ $root = Split-Path -Parent $PSScriptRoot
 $backendDir = Join-Path $root "backend"
 $frontendDir = Join-Path $root "frontend"
 $python = Join-Path $backendDir ".venv\Scripts\python.exe"
-$bundledNode = Join-Path $env:USERPROFILE ".cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe"
 $vite = Join-Path $frontendDir "node_modules\vite\bin\vite.js"
 
 function Test-LocalPort {
@@ -43,6 +42,11 @@ if (-not (Test-Path -LiteralPath $vite)) {
     throw "Frontend paketleri bulunamadi. Once frontend klasorunde 'pnpm install' calistirin."
 }
 
+$pnpm = Get-Command "pnpm.cmd" -ErrorAction SilentlyContinue
+if ($null -eq $pnpm) {
+    throw "pnpm bulunamadi. Node.js ve pnpm kurulu olmali."
+}
+
 Write-Host "DonatiPlan baslatiliyor..." -ForegroundColor Cyan
 
 if (-not (Test-LocalPort -Port 8000)) {
@@ -66,24 +70,11 @@ else {
 }
 
 if (-not (Test-LocalPort -Port 5173)) {
-    if (Test-Path -LiteralPath $bundledNode) {
-        Start-Process `
-            -FilePath $bundledNode `
-            -ArgumentList @($vite, "--host", "127.0.0.1", "--port", "5173") `
-            -WorkingDirectory $frontendDir `
-            -WindowStyle Minimized | Out-Null
-    }
-    else {
-        $node = Get-Command "node.exe" -ErrorAction SilentlyContinue
-        if ($null -eq $node) {
-            throw "Node.js bulunamadi. Node.js kurulu olmali."
-        }
-        Start-Process `
-            -FilePath $node.Source `
-            -ArgumentList @($vite, "--host", "127.0.0.1", "--port", "5173") `
-            -WorkingDirectory $frontendDir `
-            -WindowStyle Minimized | Out-Null
-    }
+    Start-Process `
+        -FilePath $pnpm.Source `
+        -ArgumentList @("exec", "vite", "--host", "127.0.0.1", "--port", "5173") `
+        -WorkingDirectory $frontendDir `
+        -WindowStyle Minimized | Out-Null
     Write-Host "  Web arayuzu baslatildi (port 5173)."
 }
 else {

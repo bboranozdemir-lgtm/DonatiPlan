@@ -41,6 +41,6 @@ CSV/XLSX dosyasında poz, çap, boy ve adet bilgileri olmalıdır. Şu başlıkl
 
 ## Temiz paylaşım / ZIP hazırlama
 
-Paylaşım paketine `.venv`, `node_modules`, `backend/data/rebarflow.db`, `__pycache__`, `.pytest_cache`, `dist`, `build`, `.git`, `.codex-tmp`, `.env`, `.env.*`, `*.db`, `*.sqlite`, `*.sqlite3` ve `*.tsbuildinfo` dosyalarını koymayın.
+Paylaşım paketine `.venv`, `node_modules`, `backend/data/rebarflow.db`, `__pycache__`, `.pytest_cache`, `dist`, `build`, `.git`, `.env`, `.env.*`, `*.db`, `*.sqlite`, `*.sqlite3` ve `*.tsbuildinfo` dosyalarını koymayın.
 
 Temiz pakette kaynak kod, `scripts`, `README.md`, `KULLANIM.md` ve örnek dosyalar yeterlidir. Böylece hem paket küçülür hem de gerçek kullanıcı/veritabanı bilgileri yanlışlıkla paylaşılmaz.

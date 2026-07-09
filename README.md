@@ -109,7 +109,6 @@ ZIP’e koymayın:
 - `dist`
 - `build`
 - `.git`
-- `.codex-tmp`
 - `.env`
 - `.env.*`
 - `*.db`, `*.sqlite`, `*.sqlite3`

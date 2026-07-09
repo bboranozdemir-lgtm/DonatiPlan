@@ -24,8 +24,7 @@ build/
 *.sqlite
 *.sqlite3
 
-# Codex/local scratch
-.codex-tmp/
+# Local scratch
 work/
 
 # OS/editor noise
