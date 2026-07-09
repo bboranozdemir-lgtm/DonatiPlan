@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rebarflow"
+version = "0.1.0"
+description = "Rebar cutting and remnant reuse optimization core"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.139,<1.0",
+    "openpyxl>=3.1,<4.0",
+    "ortools>=9.15,<10.0",
+    "qrcode[pil]>=8.2,<9.0",
+    "reportlab>=5.0,<6.0",
+    "uvicorn[standard]>=0.49,<1.0",
+]
+
+[project.optional-dependencies]
+test = ["httpx>=0.28,<1.0"]
+
+[project.scripts]
+rebarflow-api = "rebarflow.api:run"
+
+[tool.setuptools.packages.find]
+where = ["src"]

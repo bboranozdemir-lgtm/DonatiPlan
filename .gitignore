@@ -1,0 +1,33 @@
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Python/backend local state
+.venv/
+backend/.venv/
+backend/data/
+backend/data/rebarflow.db
+
+# Frontend dependencies and build outputs
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+build/
+*.tsbuildinfo
+
+# Local databases and secrets
+.env
+.env.*
+*.db
+*.sqlite
+*.sqlite3
+
+# Codex/local scratch
+.codex-tmp/
+work/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db

@@ -1,0 +1,2 @@
+[console_scripts]
+rebarflow-api = rebarflow.api:run

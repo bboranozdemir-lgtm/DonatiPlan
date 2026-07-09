@@ -1,0 +1,6 @@
+﻿Poz;Fi;Kesim Boyu (mm);Adet;Açıklama;Faz
+BAD-Ø16-UZUN;16;12500;1;12 metreden uzun hatalı parça;1
+BAD-Ø12-NEG;12;-3000;2;Negatif uzunluk;1
+BAD-Ø10-SIFIR;10;0;4;Sıfır uzunluk;1
+;;;;;
+BAD-Ø12-GECERLI;12;3000;2;Aynı dosyada geçerli satır;1

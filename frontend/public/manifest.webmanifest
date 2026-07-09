@@ -1,0 +1,18 @@
+{
+  "name": "DonatıPlan - Akıllı Donatı Kesim, Artık ve Hurda Analizi",
+  "short_name": "DonatıPlan",
+  "description": "Donatı kesim, artık stok ve gerçek hurda analizi karar destek sistemi by BBO",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#eef0e9",
+  "theme_color": "#10251e",
+  "lang": "tr",
+  "icons": [
+    {
+      "src": "/rebarflow-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
